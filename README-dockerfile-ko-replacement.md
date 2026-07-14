@@ -17,7 +17,7 @@ Tekton Pipelines originally used `ko` for release image publication.
 
 The replacement splits those jobs across Dockerfile and scripts:
 
-1. `Dockerfile` compiles one Go binary and creates a UBI9-based runtime image.
+1. `Dockerfile.ubi9` compiles one Go binary and creates a UBI9-based runtime image.
 2. `build.sh` builds one or all Tekton images for a single target architecture.
 3. `hack/build-ubi9-images.sh` is the release-task helper for multi-arch
    `docker buildx` builds.
@@ -50,7 +50,7 @@ New flow:
 cmd/* Go packages
         |
         v
-Dockerfile / build.sh
+Dockerfile.ubi9 / build.sh
         |
         v
 UBI9 images
@@ -110,7 +110,7 @@ icr.io/my-namespace/tekton/github.com/tektoncd/pipeline/cmd/controller:v1.14.0
 
 | File | Purpose |
 | --- | --- |
-| `Dockerfile` | Root multi-stage Dockerfile. Builds any Tekton `cmd/<name>` binary into a UBI9 runtime image. |
+| `Dockerfile.ubi9` | Root multi-stage Dockerfile. Builds any Tekton `cmd/<name>` binary into a UBI9 runtime image. |
 | `.dockerignore` | Keeps `.git`, docs, tests, examples, and other unnecessary files out of Docker build context. |
 | `build.sh` | User-facing build entrypoint. Builds one image when `CMD` is set, or all eight images by default. |
 | `hack/build-ubi9-images.sh` | Release-task helper. Uses `docker buildx` for multi-platform push builds and writes `/workspace/built_images`. |
@@ -162,7 +162,7 @@ image: icr.io/my-namespace/tekton/github.com/tektoncd/pipeline/cmd/controller@sh
 
 ## Dockerfile behavior
 
-The root `Dockerfile` is parameterized by `CMD`.
+The root `Dockerfile.ubi9` is parameterized by `CMD`.
 
 Important build arguments:
 
@@ -171,9 +171,37 @@ Important build arguments:
 | `CMD` | The command package under `cmd/` to build. Required. |
 | `TARGETOS` | Go target OS. | `linux` |
 | `TARGETARCH` | Go target architecture. | `amd64` |
-| `BUILDER_IMAGE` | Builder base image. | `registry.access.redhat.com/ubi9/go-toolset:latest` |
-| `RUNTIME_IMAGE` | Runtime base image. | `registry.access.redhat.com/ubi9/ubi-minimal:latest` |
+| `BUILDER_IMAGE` | Builder base image. | `registry.access.redhat.com/ubi9/ubi:9.8-1782841664` |
+| `RUNTIME_IMAGE` | Runtime base image. | `registry.access.redhat.com/ubi9/ubi-minimal:9.8-1782797275` |
 | `INSTALL_RESOLVER_TOOLS` | Installs resolver-only runtime tooling. | `false` |
+
+## UBI9 image choices
+
+The migration pins UBI images instead of using floating `latest` tags.
+
+Available UBI9 image inputs considered:
+
+| Image type | Image |
+| --- | --- |
+| UBI9 default | `registry.access.redhat.com/ubi9/ubi:9.8-1782841664` |
+| UBI9 minimal | `registry.access.redhat.com/ubi9/ubi-minimal:9.8-1782797275` |
+| UBI9 Python | `registry.access.redhat.com/ubi9/python-312:9.8-1783600910` |
+| UBI9 micro | `registry.access.redhat.com/ubi9/ubi-micro:9.8-1782840931` |
+
+Current Dockerfile usage:
+
+| Stage | Image | Reason |
+| --- | --- | --- |
+| Builder | `registry.access.redhat.com/ubi9/ubi:9.8-1782841664` | Full UBI has `dnf`, so the builder can install Go and build the Tekton binaries. |
+| Runtime | `registry.access.redhat.com/ubi9/ubi-minimal:9.8-1782797275` | Smaller UBI runtime image while still supporting `microdnf` for resolver-only `git-core`. |
+
+The Python image is not used because Tekton Pipelines release binaries are Go
+programs, not Python applications.
+
+The micro image is not used for the current runtime because the resolver image
+needs `git-core`; UBI micro is too small for that package-install flow. If all
+runtime dependencies were copied in from a builder stage, UBI micro could be
+evaluated separately.
 
 The builder stage:
 
@@ -184,7 +212,7 @@ go build -mod=vendor -buildvcs=false -trimpath -ldflags="-s -w" ./cmd/${CMD}
 The runtime stage:
 
 ```text
-registry.access.redhat.com/ubi9/ubi-minimal:latest
+registry.access.redhat.com/ubi9/ubi-minimal:9.8-1782797275
 ```
 
 The final binary is copied to:
@@ -503,11 +531,11 @@ PUSH=false
 ### `tini` is not available in UBI9 minimal
 
 UBI9 minimal does not provide a `tini` package in the enabled repositories.
-The Dockerfile creates `/sbin/tini` as a small wrapper for the resolver image.
+`Dockerfile.ubi9` creates `/sbin/tini` as a small wrapper for the resolver image.
 
 ### Go build fails with VCS stamping
 
-The Dockerfile uses:
+`Dockerfile.ubi9` uses:
 
 ```text
 -buildvcs=false

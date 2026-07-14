@@ -13,6 +13,15 @@ GOLANGCI_VERSION := $(shell yq '.jobs.linting.steps[] | select(.name == "golangc
 WOKE_VERSION     = v0.19.0
 
 GO           = go
+DOCKER       ?= docker
+DOCKERFILE   ?= Dockerfile.ubi9
+TARGETARCH   ?= amd64
+TARGETOS     ?= linux
+CMD          ?= nop
+IMAGE_NAME   ?= local/tekton-$(CMD)
+IMAGE_TAG    ?= test
+INFO         ?= echo ==\>
+OK           ?= echo OK:
 TIMEOUT_UNIT = 5m
 TIMEOUT_E2E  = 20m
 DEFAULT_GOTESTSUM_FORMAT ?= testdox
@@ -40,6 +49,13 @@ FORCE:
 
 bin/%: cmd/% FORCE
 	$Q $(GO) build -mod=vendor $(LDFLAGS) -v -o $@ ./$<
+
+.PHONY: docker-build
+docker-build: ## Build one UBI9 image with Dockerfile.ubi9. Override CMD, IMAGE_NAME, IMAGE_TAG, TARGETARCH, TARGETOS as needed.
+	@$(INFO) $(DOCKER) build
+	@echo $(DOCKER) buildx build -f $(DOCKERFILE) -t $(IMAGE_NAME):$(IMAGE_TAG) --build-arg CMD=$(CMD) --build-arg TARGETARCH=$(TARGETARCH) --build-arg TARGETOS=$(TARGETOS) --load .
+	$(DOCKER) buildx build -f $(DOCKERFILE) -t $(IMAGE_NAME):$(IMAGE_TAG) --build-arg CMD=$(CMD) --build-arg TARGETARCH=$(TARGETARCH) --build-arg TARGETOS=$(TARGETOS) --load .
+	@$(OK) $(DOCKER) build
 
 .PHONY: cross
 cross: amd64 arm arm64 s390x ppc64le ## build cross platform binaries

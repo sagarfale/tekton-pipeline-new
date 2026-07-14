@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # build.sh - called by the pipeline to build Tekton Pipeline images.
-# Builds Docker images using the multi-stage root Dockerfile that:
+# Builds Docker images using the multi-stage root Dockerfile.ubi9 that:
 #   1. Compiles the requested Go binary in the builder stage
 #   2. Creates the final minimal UBI9-based container image
 set -euo pipefail
@@ -16,7 +16,7 @@ VERSION_TAG="${VERSION_TAG:-${IMAGE_TAG:-v1.14.0}}"
 CONTAINER_REGISTRY="${CONTAINER_REGISTRY:-${IMAGE_REGISTRY:-icr.io/tektoncd/pipeline}}"
 TARGETARCH="${TARGETARCH:-amd64}"
 TARGETOS="${TARGETOS:-linux}"
-DOCKERFILE="${DOCKERFILE:-Dockerfile}"
+DOCKERFILE="${DOCKERFILE:-Dockerfile.ubi9}"
 OUTPUT_BUILT_IMAGES="${OUTPUT_BUILT_IMAGES:-/workspace/built_images}"
 PUSH="${PUSH:-false}"
 DOCKER_BUILD_EXTRA_ARGS="${DOCKER_BUILD_EXTRA_ARGS:-}"

@@ -51,7 +51,7 @@ ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/cmd/controller:v1.14.0
 
 | File | Purpose |
 | --- | --- |
-| `Dockerfile` | Root UBI9 multi-stage Dockerfile. It builds any `cmd/<name>` binary via `ARG CMD`. |
+| `Dockerfile.ubi9` | Root UBI9 multi-stage Dockerfile. It builds any `cmd/<name>` binary via `ARG CMD`. |
 | `build.sh` | Root single-platform Docker build entrypoint. Builds one image when `CMD` is set, or all release images by default. |
 | `hack/build-ubi9-images.sh` | Builds and pushes all release images with `docker buildx`, then writes `/workspace/built_images` as `tag@digest` references. |
 | `hack/render-docker-release-yaml.sh` | Concatenates `config/**/*.yaml`, replaces `ko://` image refs, and writes `release.yaml` plus `release.notags.yaml`. |
@@ -60,6 +60,19 @@ ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/cmd/controller:v1.14.0
 | `.github/workflows/nightly-builds.yaml` | Passes the renamed Docker build argument parameter. |
 | `.github/workflows/ci.yaml` | Validates release YAML rendering without invoking `ko resolve`. |
 | `config/controller.yaml` | Updates stale wording so helper image placeholders are described as release-rendered references. |
+
+## UBI9 base images
+
+`Dockerfile.ubi9` pins UBI9 images:
+
+| Stage | Image |
+| --- | --- |
+| Builder | `registry.access.redhat.com/ubi9/ubi:9.8-1782841664` |
+| Runtime | `registry.access.redhat.com/ubi9/ubi-minimal:9.8-1782797275` |
+
+The UBI9 Python image is not used because the release binaries are Go programs.
+The UBI9 micro image is not used because the resolver runtime still needs
+`git-core`, which is installed with `microdnf` in the minimal image.
 
 ## Behavioral differences from ko
 
@@ -71,7 +84,7 @@ ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/cmd/controller:v1.14.0
 
 The Dockerfile flow splits those jobs:
 
-1. `Dockerfile` builds a binary image for one `cmd/<name>`.
+1. `Dockerfile.ubi9` builds a binary image for one `cmd/<name>`.
 2. `hack/build-ubi9-images.sh` builds and pushes all images.
 3. `hack/render-docker-release-yaml.sh` rewrites release YAML.
 
