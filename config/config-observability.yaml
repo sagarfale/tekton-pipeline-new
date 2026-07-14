@@ -1,0 +1,86 @@
+# Copyright 2019 The Tekton Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-observability
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/part-of: tekton-pipelines
+data:
+  metrics-protocol: prometheus
+  _example: |
+    ################################
+    #                              #
+    #    EXAMPLE CONFIGURATION     #
+    #                              #
+    ################################
+
+    # This block is not actually functional configuration,
+    # but serves to illustrate the available configuration
+    # options and document them in a way that is accessible
+    # to users that `kubectl edit` this config map.
+    #
+    # These sample configuration options may be copied out of
+    # this example block and unindented to be in the data block
+    # to actually change the configuration.
+
+    # OpenTelemetry Metrics Configuration
+    # Protocol for metrics export (prometheus, grpc, http/protobuf, none)
+    # Default if not specified: "none"
+    metrics-protocol: prometheus
+
+    # Metrics endpoint (for grpc/http protocols)
+    # Default: empty (uses default OTLP endpoint)
+    metrics-endpoint: ""
+
+    # Metrics export interval (e.g., "30s", "1m")
+    # Default: empty (uses default interval)
+    metrics-export-interval: ""
+
+    # OpenTelemetry Tracing Configuration
+    # Protocol for tracing export (grpc, http/protobuf, none, stdout)
+    # Default: none
+    tracing-protocol: none
+
+    # Tracing endpoint (for grpc/http protocols)
+    # Default: empty
+    tracing-endpoint: ""
+
+    # Tracing sampling rate (0.0 to 1.0)
+    # Default: 1.0 (100% sampling)
+    tracing-sampling-rate: "1.0"
+
+    # Runtime Configuration
+    # Enable profiling (enabled, disabled)
+    # Default: disabled
+    runtime-profiling: disabled
+
+    # Runtime export interval (e.g., "15s")
+    # Default: 15s
+    runtime-export-interval: "15s"
+
+    # Note: Legacy OpenCensus configuration (metrics.backend-destination, etc.) has been
+    # removed as OpenCensus support is no longer provided by the underlying infrastructure.
+    # Please use the OpenTelemetry configuration options above.
+
+    # Tekton-specific metrics configuration
+    metrics.taskrun.level: "task"
+    metrics.taskrun.duration-type: "histogram"
+    metrics.pipelinerun.level: "pipeline"
+    metrics.pipelinerun.duration-type: "histogram"
+    metrics.count.enable-reason: "false"
+    metrics.running-pipelinerun.level: ""

@@ -1,0 +1,390 @@
+/*
+Copyright 2019 The Tekton Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package cloudevent_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/tektoncd/pipeline/pkg/apis/config"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/reconciler/events/cache"
+	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
+	"github.com/tektoncd/pipeline/pkg/reconciler/events/k8sevent"
+	"github.com/tektoncd/pipeline/test/diff"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
+	"knative.dev/pkg/apis"
+	duckv1 "knative.dev/pkg/apis/duck/v1"
+	"knative.dev/pkg/controller"
+	rtesting "knative.dev/pkg/reconciler/testing"
+)
+
+func TestSendCloudEventWithRetries(t *testing.T) {
+	objectStatus := duckv1.Status{
+		Conditions: []apis.Condition{{
+			Type:   apis.ConditionSucceeded,
+			Status: corev1.ConditionTrue,
+		}},
+	}
+
+	tests := []struct {
+		name            string
+		clientBehaviour cloudevent.FakeClientBehaviour
+		object          v1beta1.RunObject
+		wantCEvents     []string
+		wantEvents      []string
+	}{{
+		name: "test-send-cloud-event-taskrun",
+		clientBehaviour: cloudevent.FakeClientBehaviour{
+			SendSuccessfully: true,
+		},
+		object: &v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				SelfLink: "/taskruns/test1",
+			},
+			Status: v1.TaskRunStatus{Status: objectStatus},
+		},
+		wantCEvents: []string{"Context Attributes,"},
+		wantEvents:  []string{"Normal CloudEventSent"},
+	}, {
+		name: "test-send-cloud-event-pipelinerun",
+		clientBehaviour: cloudevent.FakeClientBehaviour{
+			SendSuccessfully: true,
+		},
+		object: &v1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				SelfLink: "/pipelineruns/test1",
+			},
+			Status: v1.PipelineRunStatus{Status: objectStatus},
+		},
+		wantCEvents: []string{"Context Attributes,"},
+		wantEvents:  []string{"Normal CloudEventSent"},
+	}, {
+		name: "test-send-cloud-event-failed",
+		clientBehaviour: cloudevent.FakeClientBehaviour{
+			SendSuccessfully: false,
+		},
+		object: &v1.PipelineRun{
+			Status: v1.PipelineRunStatus{Status: objectStatus},
+		},
+		wantCEvents: []string{},
+		wantEvents:  []string{"Warning CloudEventFailed"},
+	}, {
+		name: "test-send-cloud-event-customrun",
+		clientBehaviour: cloudevent.FakeClientBehaviour{
+			SendSuccessfully: true,
+		},
+		object:      &v1beta1.CustomRun{},
+		wantCEvents: []string{"Context Attributes,"},
+		wantEvents:  []string{"Normal CloudEventSent"},
+	}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := setupFakeContext(t, tc.clientBehaviour, true, len(tc.wantCEvents))
+			if err := cloudevent.SendCloudEventWithRetries(ctx, tc.object); err != nil {
+				t.Fatalf("Unexpected error sending cloud events: %v", err)
+			}
+			ceClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+			ceClient.CheckCloudEventsUnordered(t, tc.name, tc.wantCEvents)
+			recorder := controller.GetEventRecorder(ctx).(*record.FakeRecorder)
+			if err := k8sevent.CheckEventsOrdered(t, recorder.Events, tc.name, tc.wantEvents); err != nil {
+				t.Fatal(err.Error())
+			}
+		})
+	}
+}
+
+// TestSendCloudEventWithRetriesQueued verifies that a TaskRun with no condition
+// (not yet picked up by the core reconciler) sends a queued event successfully.
+func TestSendCloudEventWithRetriesQueued(t *testing.T) {
+	ctx := setupFakeContext(t, cloudevent.FakeClientBehaviour{SendSuccessfully: true}, true, 1)
+	object := &v1.TaskRun{Status: v1.TaskRunStatus{}}
+	if err := cloudevent.SendCloudEventWithRetries(ctx, object); err != nil {
+		t.Fatalf("Unexpected error sending queued cloud event: %v", err)
+	}
+	ceClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+	ceClient.CheckCloudEventsUnordered(t, "queued taskrun", []string{"Context Attributes,"})
+	recorder := controller.GetEventRecorder(ctx).(*record.FakeRecorder)
+	if err := k8sevent.CheckEventsOrdered(t, recorder.Events, "queued taskrun", []string{"Normal CloudEventSent"}); err != nil {
+		t.Fatal(err.Error())
+	}
+}
+
+// TestSendCloudEventWithRetriesQueuedPipelineRun verifies that a PipelineRun with no condition
+// (not yet picked up by the core reconciler) sends a queued event successfully.
+func TestSendCloudEventWithRetriesQueuedPipelineRun(t *testing.T) {
+	ctx := setupFakeContext(t, cloudevent.FakeClientBehaviour{SendSuccessfully: true}, true, 1)
+	object := &v1.PipelineRun{Status: v1.PipelineRunStatus{}}
+	if err := cloudevent.SendCloudEventWithRetries(ctx, object); err != nil {
+		t.Fatalf("Unexpected error sending queued cloud event: %v", err)
+	}
+	ceClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+	ceClient.CheckCloudEventsUnordered(t, "queued pipelinerun", []string{"Context Attributes,"})
+	recorder := controller.GetEventRecorder(ctx).(*record.FakeRecorder)
+	if err := k8sevent.CheckEventsOrdered(t, recorder.Events, "queued pipelinerun", []string{"Normal CloudEventSent"}); err != nil {
+		t.Fatal(err.Error())
+	}
+}
+
+func TestSendCloudEventWithRetriesNoClient(t *testing.T) {
+	ctx := setupFakeContext(t, cloudevent.FakeClientBehaviour{}, false, 0)
+	err := cloudevent.SendCloudEventWithRetries(ctx, &v1.TaskRun{Status: v1.TaskRunStatus{}})
+	if err == nil {
+		t.Fatalf("Expected an error sending cloud events with no client in the context, got none")
+	}
+	if d := cmp.Diff("no cloud events client found in the context", err.Error()); d != "" {
+		t.Fatalf("Unexpected error message %s", diff.PrintWantGot(d))
+	}
+}
+
+func TestEmitCloudEvents(t *testing.T) {
+	object := &v1beta1.CustomRun{
+		ObjectMeta: metav1.ObjectMeta{
+			SelfLink: "/customrun/test1",
+		},
+		Status: v1beta1.CustomRunStatus{},
+	}
+	testcases := []struct {
+		name            string
+		defaults        map[string]string
+		events          map[string]string
+		wantEvents      []string
+		wantCloudEvents []string
+	}{{
+		name:            "without sink",
+		defaults:        map[string]string{},
+		events:          map[string]string{},
+		wantEvents:      []string{},
+		wantCloudEvents: []string{},
+	}, {
+		name:            "with empty string sink",
+		defaults:        map[string]string{},
+		events:          map[string]string{"sink": ""},
+		wantEvents:      []string{},
+		wantCloudEvents: []string{},
+	}, {
+		name:            "with sink",
+		defaults:        map[string]string{},
+		events:          map[string]string{"sink": "http://mysink"},
+		wantEvents:      []string{"Normal CloudEventSent"},
+		wantCloudEvents: []string{`(?s)dev.tekton.event.customrun.started.v1.*test1`},
+	}, {
+		name:            "with legacy sink",
+		defaults:        map[string]string{"default-cloud-events-sink": "http://mysink.defaults"},
+		events:          map[string]string{},
+		wantEvents:      []string{"Normal CloudEventSent"},
+		wantCloudEvents: []string{`(?s)dev.tekton.event.customrun.started.v1.*test1`},
+	}, {
+		name:            "with both sinks",
+		defaults:        map[string]string{"default-cloud-events-sink": "http://mysink.defaults"},
+		events:          map[string]string{"sink": "http://mysink.events"},
+		wantEvents:      []string{"Normal CloudEventSent"},
+		wantCloudEvents: []string{`(?s)dev.tekton.event.customrun.started.v1.*test1`},
+	}}
+
+	for _, tc := range testcases {
+		// Setup the context and seed test data
+		ctx, _ := rtesting.SetupFakeContext(t)
+		ctx = cloudevent.WithFakeClient(ctx, &cloudevent.FakeClientBehaviour{SendSuccessfully: true}, len(tc.wantCloudEvents))
+		fakeClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+
+		// Setup the config and add it to the context
+		eventsConfig, _ := config.NewEventsFromMap(tc.events)
+		defaultsConfig, _ := config.NewDefaultsFromMap(tc.defaults)
+		cfg := &config.Config{
+			Events:       eventsConfig,
+			Defaults:     defaultsConfig,
+			FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+		}
+		ctx = config.ToContext(ctx, cfg)
+
+		recorder := controller.GetEventRecorder(ctx).(*record.FakeRecorder)
+		cloudevent.EmitCloudEvents(ctx, object)
+		if err := k8sevent.CheckEventsOrdered(t, recorder.Events, tc.name, tc.wantEvents); err != nil {
+			t.Fatal(err.Error())
+		}
+		fakeClient.CheckCloudEventsUnordered(t, tc.name, tc.wantCloudEvents)
+	}
+}
+
+// TestEmitCloudEvents_NoCacheClient verifies that no cloud event is sent when
+// a sink is configured but the cache client is missing from the context.
+func TestEmitCloudEvents_NoCacheClient(t *testing.T) {
+	object := &v1beta1.CustomRun{
+		ObjectMeta: metav1.ObjectMeta{
+			SelfLink: "/customrun/test1",
+		},
+		Status: v1beta1.CustomRunStatus{},
+	}
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	// Override the injected cache client with nil to simulate a missing client
+	ctx = cache.ToContext(ctx, nil)
+	ctx = cloudevent.WithFakeClient(ctx, &cloudevent.FakeClientBehaviour{SendSuccessfully: true}, 0)
+	fakeClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+
+	eventsConfig, _ := config.NewEventsFromMap(map[string]string{"sink": "http://mysink"})
+	cfg := &config.Config{
+		Events:       eventsConfig,
+		Defaults:     config.DefaultConfig.DeepCopy(),
+		FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+	}
+	ctx = config.ToContext(ctx, cfg)
+
+	cloudevent.EmitCloudEvents(ctx, object)
+	fakeClient.CheckCloudEventsUnordered(t, "no cache client", []string{})
+}
+
+func TestEmitCloudEventsWhenConditionChange(t *testing.T) {
+	objectStatus := duckv1.Status{
+		Conditions: []apis.Condition{{
+			Type:   apis.ConditionSucceeded,
+			Status: corev1.ConditionUnknown,
+			Reason: v1.PipelineRunReasonStarted.String(),
+		}},
+	}
+	object := &v1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			SelfLink: "/pipelineruns/test1",
+		},
+		Status: v1.PipelineRunStatus{Status: objectStatus},
+	}
+	after := &apis.Condition{
+		Type:    apis.ConditionSucceeded,
+		Status:  corev1.ConditionUnknown,
+		Message: "just starting",
+	}
+
+	data := map[string]string{"sink": "http://mysink"}
+	wantCloudEvents := []string{`(?s)dev.tekton.event.pipelinerun.started.v1.*test1`}
+
+	// Setup the context and seed test data
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = cloudevent.WithFakeClient(ctx, &cloudevent.FakeClientBehaviour{SendSuccessfully: true}, len(wantCloudEvents))
+	fakeClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+
+	// Setup the config and add it to the context
+	defaultsConfig, _ := config.NewDefaultsFromMap(map[string]string{})
+	eventsConfig, _ := config.NewEventsFromMap(data)
+	cfg := &config.Config{
+		Events:       eventsConfig,
+		Defaults:     defaultsConfig,
+		FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+	}
+	ctx = config.ToContext(ctx, cfg)
+
+	cloudevent.EmitCloudEventsWhenConditionChange(ctx, nil, after, object)
+	fakeClient.CheckCloudEventsUnordered(t, "with sink", wantCloudEvents)
+}
+
+// TestEmitCloudEvents_ExplicitTektonV1Format verifies that setting formats=tektonv1
+// explicitly in the config produces the same behaviour as the default (no formats key).
+func TestEmitCloudEvents_ExplicitTektonV1Format(t *testing.T) {
+	object := &v1beta1.CustomRun{
+		ObjectMeta: metav1.ObjectMeta{SelfLink: "/customrun/test1"},
+		Status:     v1beta1.CustomRunStatus{},
+	}
+	wantCloudEvents := []string{`(?s)dev.tekton.event.customrun.started.v1.*test1`}
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = cloudevent.WithFakeClient(ctx, &cloudevent.FakeClientBehaviour{SendSuccessfully: true}, len(wantCloudEvents))
+	fakeClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+
+	eventsConfig, _ := config.NewEventsFromMap(map[string]string{
+		"sink":    "http://mysink",
+		"formats": "tektonv1",
+	})
+	cfg := &config.Config{
+		Events:       eventsConfig,
+		Defaults:     config.DefaultConfig.DeepCopy(),
+		FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+	}
+	ctx = config.ToContext(ctx, cfg)
+
+	cloudevent.EmitCloudEvents(ctx, object)
+	fakeClient.CheckCloudEventsUnordered(t, "explicit tektonv1 format", wantCloudEvents)
+}
+
+// TestEmitCloudEvents_EmptyFormats verifies that an empty formats set causes no
+// events to be sent. This state cannot be reached via ConfigMap parsing (which
+// rejects empty formats), but the guard should be exercised.
+func TestEmitCloudEvents_EmptyFormats(t *testing.T) {
+	object := &v1beta1.CustomRun{
+		ObjectMeta: metav1.ObjectMeta{SelfLink: "/customrun/test1"},
+		Status:     v1beta1.CustomRunStatus{},
+	}
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = cloudevent.WithFakeClient(ctx, &cloudevent.FakeClientBehaviour{SendSuccessfully: true}, 0)
+	fakeClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+
+	// Inject a config with a non-empty sink but empty formats set directly —
+	// bypassing the ConfigMap parser which would reject this.
+	cfg := &config.Config{
+		Events: &config.Events{
+			Sink:    "http://mysink",
+			Formats: config.EventFormats{},
+		},
+		Defaults:     config.DefaultConfig.DeepCopy(),
+		FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+	}
+	ctx = config.ToContext(ctx, cfg)
+
+	cloudevent.EmitCloudEvents(ctx, object)
+	fakeClient.CheckCloudEventsUnordered(t, "empty formats", []string{})
+}
+
+// TestEmitCloudEvents_UnknownFormat verifies that an unrecognised format value
+// causes no events to be sent (warn-and-skip rather than error).
+func TestEmitCloudEvents_UnknownFormat(t *testing.T) {
+	object := &v1beta1.CustomRun{
+		ObjectMeta: metav1.ObjectMeta{SelfLink: "/customrun/test1"},
+		Status:     v1beta1.CustomRunStatus{},
+	}
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = cloudevent.WithFakeClient(ctx, &cloudevent.FakeClientBehaviour{SendSuccessfully: true}, 0)
+	fakeClient := cloudevent.Get(ctx).(cloudevent.FakeClient)
+
+	// Inject a config with an unknown format directly — bypassing the ConfigMap
+	// parser which would reject unknown format values.
+	cfg := &config.Config{
+		Events: &config.Events{
+			Sink:    "http://mysink",
+			Formats: config.EventFormats{config.EventFormat("future-format"): {}},
+		},
+		Defaults:     config.DefaultConfig.DeepCopy(),
+		FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+	}
+	ctx = config.ToContext(ctx, cfg)
+
+	cloudevent.EmitCloudEvents(ctx, object)
+	fakeClient.CheckCloudEventsUnordered(t, "unknown format", []string{})
+}
+
+func setupFakeContext(t *testing.T, behaviour cloudevent.FakeClientBehaviour, withClient bool, expectedEventCount int) context.Context {
+	t.Helper()
+	ctx, _ := rtesting.SetupFakeContext(t)
+	if withClient {
+		ctx = cloudevent.WithFakeClient(ctx, &behaviour, expectedEventCount)
+	}
+	return ctx
+}

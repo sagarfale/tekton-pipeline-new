@@ -1,0 +1,230 @@
+version: "2"
+run:
+  build-tags:
+    - e2e
+  modules-download-mode: vendor
+  issues-exit-code: 1
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - decorder
+    - depguard
+    - dogsled
+    - dupword
+    - durationcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecksumtype
+    - goconst
+    - gocritic
+    - goheader
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - grouper
+    - importas
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nakedret
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - perfsprint
+    - promlinter
+    - protogetter
+    - reassign
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - tagalign
+    - testableexamples
+    - testifylint
+    - thelper
+    - unconvert
+    - usestdlibvars
+    - usetesting
+    - whitespace
+    - zerologlint
+  disable:
+    - cyclop
+    - dupl
+    - err113
+    - exhaustruct
+    - forcetypeassert
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocyclo
+    - godot
+    - godox
+    - gomoddirectives
+    - iface
+    - ireturn
+    - lll
+    - mnd
+    - nestif
+    - nlreturn
+    - nonamedreturns
+    - paralleltest
+    - prealloc
+    - predeclared
+    - recvcheck
+    - revive
+    - staticcheck
+    - tagliatelle
+    - testpackage
+    - tparallel
+    - unparam
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl
+  settings:
+    depguard:
+      rules:
+        prevent_unmaintained_packages:
+          list-mode: lax
+          files:
+            - $all
+            - '!$test'
+          allow:
+            - $gostd
+          deny:
+            - pkg: io/ioutil
+              desc: 'replaced by io and os packages since Go 1.16: https://tip.golang.org/doc/go1.16#ioutil'
+            - pkg: github.com/ghodss/yaml
+              desc: use sigs.k8s.io/yaml instead, to be consistent
+    errcheck:
+      exclude-functions:
+        - (*github.com/tektoncd/pipeline/vendor/go.uber.org/zap.SugaredLogger).Sync
+        - flag.Set
+        - os.Setenv
+        - logger.Sync
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - updateConfigMap
+    gomodguard:
+      blocked:
+        modules:
+          - github.com/ghodss/yaml:
+              recommendations:
+                - sigs.k8s.io/yaml
+    gosec:
+      excludes:
+        - G601
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - forbidigo
+        path: main\.go
+      - linters:
+          - dogsled
+          - errcheck
+          - goconst
+          - gosec
+          - ineffassign
+          - maintidx
+        path: _test\.go
+      - linters:
+          - unused
+        path: test/pipelinerun_test\.go
+      - linters:
+          - containedctx
+        path: pkg/apis/config/feature_flags_test\.go
+      - linters:
+          - containedctx
+        path: pkg/pipelinerunmetrics/injection\.go
+      - linters:
+          - maintidx
+        path: pkg/pod/pod\.go
+      - linters:
+          - containedctx
+        path: pkg/pod/creds_init_test\.go
+      - linters:
+          - maintidx
+        path: pkg/reconciler/pipelinerun/pipelinerun\.go
+      - linters:
+          - containedctx
+        path: pkg/taskrunmetrics/injection\.go
+      - linters:
+          - containedctx
+        path: test/controller\.go
+      - linters:
+          - musttag
+        path: internal/sidecarlogresults/sidecarlogresults\.go
+      - linters:
+          - errchkjson
+        path: internal/sidecarlogresults/sidecarlogresults_test\.go
+      - linters:
+          - musttag
+        path: pkg/apis/pipeline/v1.*/param_types\.go
+      - linters:
+          - contextcheck
+        path: pkg/resolution/resolver/framework/testing/fakecontroller\.go
+      - linters:
+          - contextcheck
+        path: pkg/pipelinerunmetrics/metrics\.go
+      - linters:
+          - contextcheck
+        path: pkg/reconciler/pipelinerun/pipelinerun\.go
+    paths:
+      - .*/zz_generated.deepcopy.go
+      - pkg/apis/pipeline/v1beta1/openapi_generated.go
+      - vendor
+      - pkg/client
+      - pkg/spire/test
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - .*/zz_generated.deepcopy.go
+      - pkg/apis/pipeline/v1beta1/openapi_generated.go
+      - vendor
+      - pkg/client
+      - pkg/spire/test
+      - third_party$
+      - builtin$
+      - examples$

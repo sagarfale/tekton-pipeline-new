@@ -1,0 +1,16 @@
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  generateName: propagating-workspaces-
+spec:
+  taskSpec:
+    steps:
+      - name: simple-step
+        image: mirror.gcr.io/ubuntu@sha256:0d39fcc8335d6d74d5502f6df2d30119ff4790ebbb60b364818d5112d9e3e932
+        command:
+          - echo
+        args:
+          - $(workspaces.tr-workspace.path)
+  workspaces:
+  - emptyDir: {}
+    name: tr-workspace

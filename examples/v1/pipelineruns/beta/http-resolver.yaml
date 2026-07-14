@@ -1,0 +1,25 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: http-resolver-
+spec:
+  workspaces:
+    - name: output
+      emptyDir: {}
+  pipelineSpec:
+    workspaces:
+      - name: output
+    tasks:
+      - name: http-resolver
+        taskRef:
+          resolver: http
+          params:
+            - name: url
+              value: https://raw.githubusercontent.com/tektoncd/catalog/main/task/git-clone/0.10/git-clone.yaml
+        params:
+          - name: url
+            value: "https://github.com/kelseyhightower/nocode"
+        workspaces:
+          - name: output
+            workspace: output

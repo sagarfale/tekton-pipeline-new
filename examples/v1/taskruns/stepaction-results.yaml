@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1beta1
+kind: StepAction
+metadata:
+  name: step-action
+spec:
+  image: mirror.gcr.io/alpine@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+  results:
+    - name: result1
+    - name: result2
+  script: |
+    echo "I am a Step Action!!!" >> $(step.results.result1.path)
+    echo "I am a hidden step action!!!" >> $(step.results.result2.path)
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: step-action-run
+spec:
+  taskSpec:
+    results:
+      - name: step-result
+        value: $(steps.action-runner.results.result1)
+    steps:
+      - name: action-runner
+        ref:
+          name: step-action
