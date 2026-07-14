@@ -1,0 +1,10 @@
+.git
+.github
+.tekton
+.codex
+.agents
+test
+docs
+examples
+tmp
+**/*_test.go

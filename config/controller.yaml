@@ -74,8 +74,7 @@ spec:
       - name: tekton-pipelines-controller
         image: ko://github.com/tektoncd/pipeline/cmd/controller
         args: [
-          # These images are built on-demand by `ko resolve` and are replaced
-          # by image references by digest.
+          # These image placeholders are replaced by release rendering.
           "-entrypoint-image", "ko://github.com/tektoncd/pipeline/cmd/entrypoint",
           "-nop-image", "ko://github.com/tektoncd/pipeline/cmd/nop",
           "-sidecarlogresults-image", "ko://github.com/tektoncd/pipeline/cmd/sidecarlogresults",
